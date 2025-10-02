@@ -59,7 +59,6 @@
         }
         /* --- PROCTORING UI --- */
         #quiz-container { display: none; width: 100%; height: 100%; }
-        /* FIXED: Added iframe style to ensure it fills the container */
         iframe {
             width: 100%; height: 100%; border: none;
         }
@@ -133,7 +132,7 @@
     </div>
 
     <div id="quiz-container" style="display: none;">
-         <iframe id="gform-iframe" src=""></iframe>
+        <iframe id="gform-iframe" src=""></iframe>
     </div>
 
     <div id="proctor-log" style="display: none;"></div>
@@ -179,13 +178,20 @@
             const totalFlags = Object.values(flags).reduce((a, b) => a + b, 0);
             elements.proctorLog.innerHTML = `<strong>Proctoring Flags: ${totalFlags} / ${MAX_FLAGS}</strong>`;
             elements.alertSound.play();
-            if (totalFlags > MAX_FLAGS) {
+            
+            // MODIFIED: Shows permanent border when flags REACH the max, not after exceeding.
+            if (totalFlags >= MAX_FLAGS) {
                 elements.alertBorder.style.animation = 'none';
                 elements.alertBorder.style.display = 'block';
             } else {
                 elements.alertBorder.style.animation = 'flash-red 1.5s ease-out';
                 elements.alertBorder.style.display = 'block';
-                setTimeout(() => { if (totalFlags <= MAX_FLAGS) elements.alertBorder.style.display = 'none'; }, 1500);
+                setTimeout(() => { 
+                    // Check again in case the max was reached while waiting for the timeout
+                    if (Object.values(flags).reduce((a, b) => a + b, 0) < MAX_FLAGS) {
+                        elements.alertBorder.style.display = 'none';
+                    }
+                }, 1500);
             }
         }
         
