@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Proctored Exam</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #4a69bd;
+            --dark-bg: #2c3e50;
+            --light-bg: #f8f9fa;
+            --text-light: #ecf0f1;
+            --danger-color: #e74c3c;
+            --warning-color: #f39c12;
+            --card-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        body, html {
+            margin: 0; padding: 0; height: 100%; overflow: hidden;
+            font-family: 'Poppins', sans-serif; background-color: var(--light-bg);
+        }
+        /* --- UI OVERHAUL: STYLING --- */
+        #start-screen {
+            display: flex; align-items: center; justify-content: center;
+            height: 100%; padding: 20px; box-sizing: border-box;
+        }
+        .start-card {
+            background: white; padding: 40px; border-radius: 12px;
+            box-shadow: var(--card-shadow); text-align: center;
+            max-width: 500px; width: 100%;
+        }
+        .start-card h1 { margin-top: 0; color: var(--dark-bg); }
+        #rules-list {
+            text-align: left; margin: 30px 0;
+        }
+        #rules-list ul { padding: 0; list-style-type: none; }
+        #rules-list li { display: flex; align-items: center; margin-bottom: 15px; font-size: 15px; }
+        #rules-list li svg { margin-right: 12px; flex-shrink: 0; }
+        .input-group { margin-bottom: 20px; text-align: left; }
+        .input-group input {
+            width: 100%; padding: 12px; font-size: 16px; font-family: 'Poppins';
+            border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .input-group input:focus {
+            outline: none; border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(74, 105, 189, 0.2);
+        }
+        #start-button, #permissions-button {
+            width: 100%; padding: 14px 25px; font-size: 16px; cursor: pointer;
+            background-color: var(--primary-color); color: white; border: none;
+            border-radius: 8px; font-weight: 500; transition: all 0.2s;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        #start-button:hover, #permissions-button:hover {
+            transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+        }
+        /* --- PROCTORING UI --- */
+        #quiz-container { display: none; width: 100%; height: 100%; }
+        /* FIXED: Added iframe style to ensure it fills the container */
+        iframe {
+            width: 100%; height: 100%; border: none;
+        }
+        #proctor-log {
+            position: fixed; bottom: 10px; left: 10px; background-color: var(--dark-bg);
+            color: var(--text-light); padding: 10px 15px; border-radius: 8px;
+            font-size: 14px; z-index: 9999; box-shadow: var(--card-shadow);
+        }
+        #timer-display {
+            position: fixed; top: 15px; right: 20px; background-color: var(--dark-bg);
+            color: var(--text-light); padding: 10px 15px; font-size: 20px; font-weight: 600;
+            border-radius: 8px; z-index: 9999; box-shadow: var(--card-shadow);
+        }
+        #webcam-feed {
+            position: fixed; bottom: 10px; right: 10px; width: 150px; height: 112px;
+            border: 3px solid white; border-radius: 8px; object-fit: cover;
+            transform: scaleX(-1); z-index: 9999; box-shadow: var(--card-shadow);
+            display: none;
+        }
+        .blocker {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.95); color: white;
+            z-index: 10000; justify-content: center; align-items: center;
+            text-align: center; font-size: 24px; flex-direction: column;
+        }
+        #fullscreen-blocker { cursor: pointer; }
+        /* --- DETERRENT: PHOTO SNAPSHOT --- */
+        @keyframes flash-effect {
+            from { opacity: 0.7; } to { opacity: 0; }
+        }
+        #snapshot-flash {
+            display: none; position: fixed; top: 0; left: 0;
+            width: 100%; height: 100%; background-color: white;
+            z-index: 10002; pointer-events: none;
+            animation: flash-effect 0.5s ease-out;
+        }
+    </style>
+</head>
+<body oncontextmenu="return false;">
+
+    <audio id="alert-sound" src="https://www.soundjay.com/buttons/sounds/beep-07a.mp3" preload="auto"></audio>
+    <div id="alert-border" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; box-sizing: border-box; border: 10px solid var(--danger-color); z-index: 9998; pointer-events: none;"></div>
+    <div id="camera-warning" style="display: none; position: fixed; top: 0; left: 0; width: 100%; background-color: var(--warning-color); color: white; text-align: center; padding: 8px; font-size: 14px; font-weight: bold; z-index: 10001;">⚠️ Warning: Camera not enabled. This session will be flagged for manual review.</div>
+    <video id="webcam-feed" autoplay muted playsinline></video>
+    <div id="snapshot-flash"></div>
+    <div id="start-screen">
+        <div class="start-card">
+            <div id="pre-quiz-check">
+                <h1>Secure Exam Environment</h1>
+                <div id="rules-list">
+                    <ul>
+                        <li><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path></svg>You must remain in <strong>full-screen mode</strong>.</li>
+                        <li><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>Camera access is <strong>highly recommended</strong>.</li>
+                        <li><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>Do not switch tabs or minimize the window.</li>
+                        <li><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>Keystroke patterns will be analyzed for anomalies.</li>
+                    </ul>
+                </div>
+                <button id="permissions-button">Acknowledge Rules & Proceed</button>
+            </div>
+            <div id="user-details" style="display: none;">
+                <h1>Enter Your Details</h1>
+                <div class="input-group">
+                    <input type="text" id="name" placeholder="Enter your full name" required>
+                </div>
+                <div class="input-group">
+                    <input type="email" id="email" placeholder="Enter your email" required>
+                </div>
+                <button id="start-button">Start Secure Exam</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="quiz-container" style="display: none;">
+         <iframe id="gform-iframe" src=""></iframe>
+    </div>
+
+    <div id="proctor-log" style="display: none;"></div>
+    <div id="timer-display" style="display: none;"></div>
+    <div id="fullscreen-blocker" class="blocker">
+        <h1>Full-Screen Required</h1>
+        <p>Please re-enter full-screen to continue.</p>
+    </div>
+    <div id="times-up-blocker" class="blocker">
+        <h1>Time's Up!</h1>
+        <p>The exam has now ended.</p>
+    </div>
+
+    <script>
+        // --- CONFIGURATION ---
+        const googleFormUrl = "https://docs.google.com/forms/d/e/1FAIpQLSeOb9E3vtWab-LC4VNGWiBF5dtzC19HNUG93eM50hZ1f1YJpg/viewform?embedded=true";
+        const MAX_FLAGS = 3;
+        const QUIZ_DURATION_MINUTES = 5;
+
+        // --- ELEMENTS ---
+        const elements = {
+            alertBorder: document.getElementById('alert-border'), startButton: document.getElementById('start-button'),
+            quizContainer: document.getElementById('quiz-container'), gformIframe: document.getElementById('gform-iframe'),
+            proctorLog: document.getElementById('proctor-log'), alertSound: document.getElementById('alert-sound'),
+            fullscreenBlocker: document.getElementById('fullscreen-blocker'), timerDisplay: document.getElementById('timer-display'),
+            timesUpBlocker: document.getElementById('times-up-blocker'), permissionsButton: document.getElementById('permissions-button'),
+            webcamFeed: document.getElementById('webcam-feed'), cameraWarning: document.getElementById('camera-warning'),
+            snapshotFlash: document.getElementById('snapshot-flash'),
+        };
+
+        // --- STATE ---
+        let flags = { tabSwitch: 0, fullscreen: 0, mouseLeave: 0 };
+        let violationLog = [];
+        let proctoringIntervals = {};
+
+        // --- CORE FUNCTIONS ---
+        function logViolation(type, message) {
+            const timestamp = new Date().toISOString();
+            violationLog.push({ timestamp, type, message });
+        }
+
+        function handleViolation() {
+            const totalFlags = Object.values(flags).reduce((a, b) => a + b, 0);
+            elements.proctorLog.innerHTML = `<strong>Proctoring Flags: ${totalFlags} / ${MAX_FLAGS}</strong>`;
+            elements.alertSound.play();
+            if (totalFlags > MAX_FLAGS) {
+                elements.alertBorder.style.animation = 'none';
+                elements.alertBorder.style.display = 'block';
+            } else {
+                elements.alertBorder.style.animation = 'flash-red 1.5s ease-out';
+                elements.alertBorder.style.display = 'block';
+                setTimeout(() => { if (totalFlags <= MAX_FLAGS) elements.alertBorder.style.display = 'none'; }, 1500);
+            }
+        }
+        
+        async function attemptCameraAccess() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                elements.webcamFeed.srcObject = stream;
+                logViolation('Camera', 'User granted camera access.');
+            } catch (err) {
+                logViolation('Camera', 'User denied camera access.');
+                elements.cameraWarning.style.display = 'block';
+            } finally {
+                document.getElementById('pre-quiz-check').style.display = 'none';
+                document.getElementById('user-details').style.display = 'block';
+            }
+        }
+        
+        function startQuiz() {
+            const name = document.getElementById('name').value;
+            const email = document.getElementById('email').value;
+            if (!name || !email) { alert('Please enter your details.'); return; }
+            logViolation('Quiz Start', JSON.stringify({ name, email }));
+            
+            document.documentElement.requestFullscreen().catch(console.error);
+            document.getElementById('start-screen').style.display = 'none';
+            elements.quizContainer.style.display = 'block';
+            elements.gformIframe.src = googleFormUrl;
+            
+            // Show proctoring UI
+            ['proctorLog', 'timerDisplay'].forEach(el => elements[el].style.display = 'block');
+            if (elements.webcamFeed.srcObject) elements.webcamFeed.style.display = 'block';
+            
+            startTimer();
+            startActiveProctoring();
+        }
+
+        function startActiveProctoring() {
+            document.addEventListener('visibilitychange', () => { if (document.hidden) { flags.tabSwitch++; logViolation('Tab Switch', `Flag #${flags.tabSwitch}`); handleViolation(); }});
+            document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) { flags.fullscreen++; logViolation('Fullscreen Exit', `Flag #${flags.fullscreen}`); handleViolation(); elements.fullscreenBlocker.style.display = 'flex'; } else { elements.fullscreenBlocker.style.display = 'none'; }});
+            document.documentElement.addEventListener('mouseleave', () => { flags.mouseLeave++; logViolation('Mouse Leave', `Flag #${flags.mouseLeave}`); handleViolation(); });
+            document.addEventListener('keydown', e => { if (e.ctrlKey || e.altKey) logViolation('Keystroke', `Suspicious key combination: ${e.key}`); });
+            
+            // DETERRENT: Start periodic snapshots
+            if (elements.webcamFeed.srcObject) {
+                proctoringIntervals.snapshots = setInterval(takeSnapshot, Math.random() * (25000 - 15000) + 15000); // every 15-25s
+            }
+        }
+        
+        function takeSnapshot() {
+            elements.snapshotFlash.style.display = 'block';
+            logViolation('Snapshot', 'Automatic photo snapshot taken.');
+            // In a real app, you'd draw the video to a canvas and upload it.
+            setTimeout(() => { elements.snapshotFlash.style.display = 'none'; }, 500);
+        }
+        
+        function startTimer() { 
+            const endTime = new Date().getTime() + QUIZ_DURATION_MINUTES * 60 * 1000;
+            proctoringIntervals.mainTimer = setInterval(() => {
+                const remaining = endTime - new Date().getTime();
+                if (remaining <= 0) { elements.timerDisplay.textContent = "00:00"; endQuiz("Time's Up"); return; }
+                const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((remaining % (1000 * 60)) / 1000);
+                elements.timerDisplay.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+            }, 1000);
+        }
+        
+        function endQuiz(reason) { 
+            Object.values(proctoringIntervals).forEach(clearInterval);
+            // In a real implementation, you would clear all event listeners here as well.
+            elements.timesUpBlocker.style.display = 'flex';
+            console.log("FINAL LOG:", violationLog);
+        }
+
+        // --- EVENT LISTENERS ---
+        elements.permissionsButton.addEventListener('click', attemptCameraAccess);
+        elements.startButton.addEventListener('click', startQuiz);
+        elements.fullscreenBlocker.addEventListener('click', () => document.documentElement.requestFullscreen());
+    </script>
+</body>
+</html>
